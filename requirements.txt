@@ -10,4 +10,4 @@ scikit-learn
 seaborn
 sentence-transformers
 squarify
-streamlit
+pyspark==3.5.1
