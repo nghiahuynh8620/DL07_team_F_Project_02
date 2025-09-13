@@ -19,8 +19,19 @@ st.set_page_config(
 
 
 # 🔧 Spark session (đặt ở đầu file, chỉ tạo 1 lần)
-from pyspark.sql import SparkSession
-import streamlit as st
+def get_spark_session():
+    """
+    Khởi tạo và trả về một SparkSession.
+    Hàm này được cache lại để không phải khởi tạo lại mỗi lần re-run.
+    """
+    from pyspark.sql import SparkSession
+    
+    spark = SparkSession.builder \
+        .appName("ALSInferenceStreamlit") \
+        .master("local[*]") \
+        .config("spark.driver.memory", "4g") \
+        .getOrCreate()
+    return spark
 
 # def get_spark():
 #     if "spark" not in st.session_state:
@@ -326,3 +337,4 @@ elif page == 'by rating review (ALS)':
             except Exception as e:
                 st.error("Có lỗi xảy ra khi chạy mô hình ALS.")
                 st.error(f"Chi tiết lỗi: {e}")
+
