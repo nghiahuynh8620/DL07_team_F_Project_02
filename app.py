@@ -277,52 +277,52 @@ elif page == 'by hotel name':
         st.subheader(f"Top 10 gợi ý tương tự '{selected_hotel_name}' theo {method}:")
         display_recommendation_list(recommendations)
 
+# app.py
+
+# ... (các phần code khác giữ nguyên)
+
 elif page == 'by rating review (ALS)':
     st.header("Gợi ý cho khách hàng (Mô hình ALS)")
     st.info("Tính năng này sử dụng Spark và có thể mất một chút thời gian để khởi tạo lần đầu.")
-    
+
     user_list = comments_df['Reviewer_Name'].unique()
     selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", user_list)
 
     if st.button(f"Lấy gợi ý cho {selected_user}", type="primary"):
         with st.spinner("Đang khởi tạo Spark và tải mô hình ALS..."):
             try:
-                import findspark
-                findspark.init()
-                from pyspark.sql import SparkSession
+                spark = get_spark_session()
                 from pyspark.ml.recommendation import ALSModel
-
-                spark = SparkSession.builder \
-                    .appName("AgodaALSInference") \
-                    .master("local[*]") \
-                    .getOrCreate()
-
-                # spark = SparkSession.builder.appName("ALSInference").master("local[*]").getOrCreate()
                 
                 user_map = pd.DataFrame({'Reviewer_Name': comments_df['Reviewer_Name'], 'userId': pd.factorize(comments_df['Reviewer_Name'])[0]}).drop_duplicates()
-                selected_user_id = user_map[user_map['Reviewer_Name'] == selected_user]['userId'].iloc[0]
                 
-                model = ALSModel.load("./outputs/models/best_als_model")
-                user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
-                recs_spark = model.recommendForUserSubset(user_df, 10).first()
-
-                if recs_spark and recs_spark['recommendations']:
-                    recs_list = [(row['itemId'], row['rating']) for row in recs_spark['recommendations']]
-                    recs_df = pd.DataFrame(recs_list, columns=['itemId', 'Score'])
-                    
-                    item_map = pd.DataFrame({'itemId': pd.factorize(comments_df['Hotel_ID'])[0], 'Hotel_ID': comments_df['Hotel_ID']}).drop_duplicates()
-                    recs_df = recs_df.merge(item_map, on='itemId')
-                    recs_df = recs_df.merge(hotel_df, on='Hotel_ID')
-                    
-                    st.subheader(f"Top 10 gợi ý cho khách hàng '{selected_user}':")
-                    display_recommendation_list(recs_df)
+                # ✅ SỬA LỖI: Thêm bước kiểm tra và ép kiểu tường minh
+                filtered_map = user_map[user_map['Reviewer_Name'] == selected_user]
+                
+                if filtered_map.empty:
+                    st.error(f"Không tìm thấy thông tin cho khách hàng: {selected_user}")
                 else:
-                    st.info(f"Không có gợi ý nào cho khách hàng {selected_user}.")
-                
-                spark.stop()
+                    selected_user_id = filtered_map['userId'].iloc[0]
+                    # Ép kiểu về int chuẩn của Python
+                    selected_user_id = int(selected_user_id) 
+                    
+                    model = ALSModel.load("./output/models/best_als_model")
+                    user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
+                    recs_spark = model.recommendForUserSubset(user_df, 10).first()
+
+                    if recs_spark and recs_spark['recommendations']:
+                        recs_list = [(row['itemId'], row['rating']) for row in recs_spark['recommendations']]
+                        recs_df = pd.DataFrame(recs_list, columns=['itemId', 'Score'])
+                        
+                        item_map = pd.DataFrame({'itemId': pd.factorize(comments_df['Hotel_ID'])[0], 'Hotel_ID': comments_df['Hotel_ID']}).drop_duplicates()
+                        recs_df = recs_df.merge(item_map, on='itemId')
+                        recs_df = recs_df.merge(hotel_df, on='Hotel_ID')
+                        
+                        st.subheader(f"Top 10 gợi ý cho khách hàng '{selected_user}':")
+                        display_recommendation_list(recs_df)
+                    else:
+                        st.info(f"Không có gợi ý nào cho khách hàng {selected_user}.")
 
             except Exception as e:
                 st.error("Có lỗi xảy ra khi chạy mô hình ALS.")
                 st.error(f"Chi tiết lỗi: {e}")
-                if 'spark' in locals() and spark.getActiveSession():
-                    spark.stop()
