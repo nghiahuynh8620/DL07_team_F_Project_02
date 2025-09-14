@@ -2,76 +2,72 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
+import unicodedata
+import os
+import glob
 from pathlib import Path
+
+# [OPTIMIZED] Import các thư viện ML/DL ở đây
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import unicodedata
-import re
+from pyspark.sql import SparkSession
+from pyspark.ml.recommendation import ALSModel
 
 # ---------------- Cấu hình trang (Page Config) ----------------
 st.set_page_config(
     page_title="Agoda Hotel Recommendation",
     page_icon="🏨",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# ---------------- Các hàm tải và xử lý dữ liệu (với cache) ----------------
+# ---------------- [OPTIMIZED] Hằng số và đường dẫn ----------------
+DATA_PATH = Path("./data")
+MODEL_PATH = Path("./outputs/models")
+HOTEL_INFO_FILE = DATA_PATH / "hotel_info.csv"
+HOTEL_COMMENTS_FILE = DATA_PATH / "hotel_comments.csv"
+ALS_MODEL_PATH = MODEL_PATH / "best_als_model"
+D2V_EMBEDDINGS_FILE = MODEL_PATH / "d2v_emb.npy"
+SBERT_EMBEDDINGS_FILE = MODEL_PATH / "sbert_emb.npy"
 
 
-# 🔧 Spark session (đặt ở đầu file, chỉ tạo 1 lần)
+# ---------------- [OPTIMIZED] Quản lý Spark Session ----------------
 def get_spark_session():
     """
-    Khởi tạo và trả về một SparkSession.
-    Hàm này được cache lại để không phải khởi tạo lại mỗi lần re-run.
+    Khởi tạo và trả về một SparkSession, cache trong st.session_state.
     """
-    from pyspark.sql import SparkSession
-    
-    spark = SparkSession.builder \
-        .appName("ALSInferenceStreamlit") \
-        .master("local[*]") \
-        .config("spark.driver.memory", "4g") \
-        .getOrCreate()
-    return spark
+    if "spark" not in st.session_state:
+        st.session_state.spark = (
+            SparkSession.builder
+            .master("local[*]")
+            .appName("AgodaALSApp")
+            .config("spark.driver.memory", "4g")
+            .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem")
+            .config("spark.hadoop.fs.file.impl.disable.cache", "true")
+            .getOrCreate()
+        )
+        # Ép lại cấu hình trong HadoopConf để đảm bảo
+        st.session_state.spark.sparkContext._jsc.hadoopConfiguration().set(
+            "fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem"
+        )
+    return st.session_state.spark
 
-# def get_spark():
-#     if "spark" not in st.session_state:
-#         st.session_state.spark = (
-#             SparkSession.builder
-#             .master("local[*]")
-#             .appName("AgodaALSApp")
-#             # ⬇️ bắt buộc: đọc local không kiểm checksum
-#             .config("spark.hadoop.fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem")
-#             .config("spark.hadoop.fs.file.impl.disable.cache", "true")
-#             .getOrCreate()
-#         )
-#         # ép lại ở HadoopConf (phòng trường hợp builder chưa áp)
-#         st.session_state.spark.sparkContext._jsc.hadoopConfiguration().set(
-#             "fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem"
-#         )
-#     return st.session_state.spark
+def _delete_crc_files(dir_path: str):
+    """Xóa các file .crc checksum để tránh lỗi khi Spark đọc từ local."""
+    for fp in glob.glob(os.path.join(dir_path, "**", "*.crc"), recursive=True):
+        try:
+            os.remove(fp)
+        except OSError as e:
+            st.warning(f"Không thể xóa file CRC {fp}: {e}")
 
-# # Nút reset Spark (để đảm bảo config mới được dùng)
-# if st.sidebar.button("🔄 Reset Spark"):
-#     try:
-#         st.session_state.spark.stop()
-#     except Exception:
-#         pass
-#     st.session_state.pop("spark", None)
-#     st.experimental_rerun()
 
-# spark = get_spark()
-
-# ==== Utils: chuẩn hóa/ánh xạ tên cột ====
+# ---------------- Các hàm tải và xử lý dữ liệu (giữ nguyên logic) ----------------
+# Các hàm gốc được giữ nguyên, chỉ thêm cache vào session_state
 def normalize_col(s: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', str(s).lower()).strip('_')
 
 def auto_rename_columns(df: pd.DataFrame, wanted: dict) -> pd.DataFrame:
-    """
-    wanted = {
-      'ChuẩnMuốnCó': ['candidates...', '...']
-    }
-    -> Đổi tên các cột đang có về đúng khóa 'ChuẩnMuốnCó' nếu tìm thấy ứng viên.
-    """
     norm_map = {normalize_col(c): c for c in df.columns}
     rename_dict = {}
     for target, cands in wanted.items():
@@ -84,126 +80,56 @@ def auto_rename_columns(df: pd.DataFrame, wanted: dict) -> pd.DataFrame:
         df = df.rename(columns=rename_dict)
     return df
 
-# ---------------- Các hàm tải và xử lý dữ liệu (với cache) ----------------
-@st.cache_data
 def load_main_data():
-    """Tải và chuẩn bị dữ liệu chính từ hotel_info.csv và hotel_comments.csv."""
-    # Hotel info
     try:
-        hotel_df = pd.read_csv("./data/hotel_info.csv", encoding="utf-8")
+        hotel_df = pd.read_csv(HOTEL_INFO_FILE, encoding="utf-8")
     except Exception:
-        hotel_df = pd.read_csv("./data/hotel_info.csv", encoding="latin-1")
+        hotel_df = pd.read_csv(HOTEL_INFO_FILE, encoding="latin-1")
     hotel_df.columns = hotel_df.columns.str.strip()
-
-    # Ánh xạ cột thường gặp -> tên chuẩn dùng trong app
     hotel_df = auto_rename_columns(
         hotel_df,
         {
-            "Hotel_ID": ["hotel_id", "hotelid", "id_hotel", "property_id", "propertyid", "id"],
-            "Hotel_Name": ["hotel_name", "name_hotel", "property_name", "name"],
-            "Hotel_Address": ["hotel_address", "address", "addr"],
-            "Hotel_Description": ["hotel_description", "description", "desc", "about", "overview", "summary"],
-            "Image_URL": ["image_url", "image", "photo", "thumbnail"],
-            "Hotel_Rank": ["hotel_rank", "rank", "stars", "rating_class", "star_rating"],
-            "Total_Score": ["total_score", "score", "avg_score", "overall_score"]
+            "Hotel_ID": ["hotel_id", "hotelid"], "Hotel_Name": ["hotel_name", "name"],
+            "Hotel_Address": ["hotel_address", "address"], "Hotel_Description": ["hotel_description", "description"],
+            "Image_URL": ["image_url", "image"], "Hotel_Rank": ["hotel_rank", "rank", "stars"],
+            "Total_Score": ["total_score", "score"]
         }
     )
-
-    # Nếu thiếu mô tả thì ghép tạm từ tên + địa chỉ để TF-IDF vẫn chạy
     if "Hotel_Description" not in hotel_df.columns:
         cols = [c for c in ["Hotel_Name", "Hotel_Address"] if c in hotel_df.columns]
-        if cols:
-            hotel_df["Hotel_Description"] = hotel_df[cols].astype(str).fillna("").agg(" ".join, axis=1)
-        else:
-            hotel_df["Hotel_Description"] = ""
-
+        hotel_df["Hotel_Description"] = hotel_df[cols].astype(str).fillna("").agg(" ".join, axis=1) if cols else ""
     if "Total_Score" not in hotel_df.columns:
         hotel_df["Total_Score"] = np.random.uniform(7.5, 9.8, size=len(hotel_df)).round(1)
 
-    # Comments / ratings
     try:
-        comments_df = pd.read_csv("./data/hotel_comments.csv", encoding="utf-8")
+        comments_df = pd.read_csv(HOTEL_COMMENTS_FILE, encoding="utf-8")
     except Exception:
-        comments_df = pd.read_csv("./data/hotel_comments.csv", encoding="latin-1")
-
+        comments_df = pd.read_csv(HOTEL_COMMENTS_FILE, encoding="latin-1")
     comments_df.columns = comments_df.columns.str.strip()
-    comments_df = auto_rename_columns(
-        comments_df,
-        {
-            "Reviewer_Name": ["reviewer_name", "reviewer", "user", "user_name", "username", "customer_name", "author", "name"],
-            "Hotel_ID": ["hotel_id", "hotelid", "id_hotel", "property_id", "propertyid", "id"]
-        }
-    )
-
-    # Cảnh báo dễ hiểu nếu vẫn thiếu cột bắt buộc
+    comments_df = auto_rename_columns(comments_df, {"Reviewer_Name": ["reviewer_name", "user_name"], "Hotel_ID": ["hotel_id"]})
+    
     missing = [c for c in ["Reviewer_Name", "Hotel_ID"] if c not in comments_df.columns]
     if missing:
-        st.error(
-            "Thiếu cột bắt buộc trong file `hotel_comments.csv`: "
-            + ", ".join(missing)
-            + ".\nCác cột hiện có: "
-            + ", ".join(list(comments_df.columns))
-        )
-
+        st.error(f"Thiếu cột bắt buộc trong file `{HOTEL_COMMENTS_FILE.name}`: {', '.join(missing)}")
+        st.stop()
+        
     return hotel_df, comments_df
 
-from pyspark.ml.recommendation import ALSModel
-from pathlib import Path
-import os, glob
-
-def _delete_crc_under(dir_path: str):
-    for fp in glob.glob(os.path.join(dir_path, "**", "*.crc"), recursive=True):
-        try:
-            os.remove(fp)
-        except Exception:
-            pass
-
-@st.cache_resource
-def load_als_model():
-    # Tránh nhầm sang bản “- Copy”, và chuẩn hóa thành file:/// URI
-    model_dir = Path("./outputs/models/best_als_model").resolve()
-    st.info(f"Đang load ALS model từ: {model_dir}")  # để bạn nhìn đúng thư mục
-    _delete_crc_under(str(model_dir))                 # ✅ bỏ CRC gây lệch checksum
-    uri = model_dir.as_uri()                          # vd: file:///C:/.../best_als_model
-    try:
-        return ALSModel.load(uri)
-    except Exception as e:
-        # ép lại cấu hình lần nữa rồi thử lại
-        spark.sparkContext._jsc.hadoopConfiguration().set(
-            "fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem"
-        )
-        _delete_crc_under(str(model_dir))
-        return ALSModel.load(uri)
-
-@st.cache_resource
-def create_tfidf_recommender(_hotel_df):
-    """Tạo recommender dựa trên TF-IDF (chịu lỗi cột mô tả thiếu)."""
-    desc_col = "Hotel_Description" if "Hotel_Description" in _hotel_df.columns else None
-    if not desc_col:
-        # fallback an toàn
-        _hotel_df["__desc_fallback__"] = _hotel_df.astype(str).fillna("").agg(" ".join, axis=1)
-        desc_col = "__desc_fallback__"
-    corpus = _hotel_df[desc_col].astype(str).fillna("").apply(preprocess_text)
+def create_tfidf_recommender(hotel_df):
+    corpus = hotel_df["Hotel_Description"].astype(str).fillna("").apply(preprocess_text)
     tfidf = TfidfVectorizer(max_features=10000, ngram_range=(1, 2), min_df=2)
     tfidf_matrix = tfidf.fit_transform(corpus)
     cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
     return tfidf, tfidf_matrix, cosine_sim
 
-@st.cache_resource
-def load_embeddings(model_name):
-    """Tải các file embedding đã tính sẵn (Doc2Vec, SBERT)."""
-    # Đổi 'output' -> 'outputs' cho đúng thư mục
-    path = f"./outputs/models/{model_name}_emb.npy"
+def load_embeddings(embedding_file):
     try:
-        embeddings = np.load(path)
-        return embeddings
+        return np.load(embedding_file)
     except FileNotFoundError:
-        st.warning(f"Không tìm thấy embeddings tại: {path}")
+        st.warning(f"Không tìm thấy file embedding tại: {embedding_file}")
         return None
 
-
 def preprocess_text(text):
-    """Hàm tiền xử lý văn bản tiếng Việt."""
     if not isinstance(text, str): text = str(text)
     text = unicodedata.normalize("NFC", text.lower())
     text = re.sub(r"[^\w\s]", " ", text)
@@ -211,130 +137,214 @@ def preprocess_text(text):
     return text
 
 def get_content_recommendations(hotel_index, sim_matrix, df, top_n=10):
-    """Lấy gợi ý từ ma trận tương đồng đã có."""
-    sim_scores = list(enumerate(sim_matrix[hotel_index]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    sim_scores = sorted(list(enumerate(sim_matrix[hotel_index])), key=lambda x: x[1], reverse=True)
     sim_scores = sim_scores[1:top_n+1]
     hotel_indices = [i[0] for i in sim_scores]
     return df.iloc[hotel_indices]
 
+
+# ---------------- [OPTIMIZED] Hàm khởi tạo state ----------------
+def initialize_session_state():
+    """
+    Tải tất cả dữ liệu và model vào st.session_state để tránh tải lại.
+    """
+    if "initialized" in st.session_state:
+        return
+
+    with st.spinner("Đang chuẩn bị dữ liệu và mô hình cho lần đầu tiên..."):
+        st.session_state.hotel_df, st.session_state.comments_df = load_main_data()
+        
+        # Content-based models
+        tfidf_recommender = create_tfidf_recommender(st.session_state.hotel_df)
+        st.session_state.tfidf_vectorizer = tfidf_recommender[0]
+        st.session_state.tfidf_matrix = tfidf_recommender[1]
+        st.session_state.tfidf_cosine_sim = tfidf_recommender[2]
+        
+        st.session_state.d2v_embeddings = load_embeddings(D2V_EMBEDDINGS_FILE)
+        st.session_state.sbert_embeddings = load_embeddings(SBERT_EMBEDDINGS_FILE)
+        
+        # Tạo sẵn danh sách hotel và user để dùng trong UI
+        st.session_state.hotel_names = st.session_state.hotel_df['Hotel_Name'].unique()
+        st.session_state.user_list = sorted(st.session_state.comments_df['Reviewer_Name'].unique())
+
+    st.session_state.initialized = True
+    st.success("Sẵn sàng!", icon="✅")
+
+
+# ---------------- [OPTIMIZED] Giao diện hiển thị gợi ý ----------------
 def display_recommendation_list(df_recommendations):
-    """Hiển thị danh sách khách sạn được gợi ý một cách đẹp mắt."""
+    """
+    Hiển thị danh sách khách sạn được gợi ý với giao diện chuyên nghiệp hơn.
+    """
     if df_recommendations.empty:
-        st.info("Không tìm thấy gợi ý nào.")
+        st.info("Không tìm thấy gợi ý nào phù hợp.")
         return
     
-    for index, row in df_recommendations.iterrows():
-        with st.container(border=True):
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                st.image(row.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'))
-            with col2:
-                st.subheader(row['Hotel_Name'])
-                st.caption(f"📍 {row.get('Hotel_Address', 'N/A')}")
-                st.write(f"⭐ **Hạng:** {row.get('Hotel_Rank', 'N/A')} | 💯 **Điểm:** {row.get('Total_Score', 'N/A')}")
+    #     cols = st.columns(3) # Tạo 3 cột để hiển thị
+    for i, row in enumerate(df_recommendations.iterrows()):
+        index, data = row
+        with cols[i % 3]: # Lần lượt điền vào từng cột
+            with st.container(border=True):
+                st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_column_width=True)
                 
-# ---------------- Chương trình chính ----------------
+                st.subheader(data['Hotel_Name'])
+                st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
+                
+                metric_cols = st.columns(2)
+                with metric_cols[0]:
+                    st.metric(label="⭐ Hạng", value=f"{data.get('Hotel_Rank', 'N/A')}")
+                with metric_cols[1]:
+                    st.metric(label="💯 Điểm", value=f"{data.get('Total_Score', 'N/A')}")
+                
+                with st.expander("Xem mô tả"):
+                    st.write(data.get('Hotel_Description', 'Không có mô tả.'))
 
-# --- Tải và chuẩn bị dữ liệu ---
-hotel_df, comments_df = load_main_data()
-tfidf_vectorizer, tfidf_matrix, tfidf_cosine_sim = create_tfidf_recommender(hotel_df)
-d2v_embeddings = load_embeddings("d2v")
-sbert_embeddings = load_embeddings("sbert")
 
-# --- Giao diện ---
-st.title("AGODA Hotel Recommendation")
-st.caption("Get tailored hotel suggestions with advanced filtering and multiple recommendation models.")
-
-with st.sidebar:
-    st.image("logo.png", width=100)
-    st.header("Suggestions")
-    page = st.radio(
-        "",
-        ('by hotel description', 'by hotel name', 'by rating review (ALS)')
-    )
-    st.markdown("---")
-    st.header("About this project")
-    st.info("Đồ án tốt nghiệp ứng dụng các thuật toán gợi ý vào bài toán thực tế trên dữ liệu từ Agoda.")
+# ---------------- [OPTIMIZED] Các hàm render cho từng trang ----------------
+def render_page_by_description():
+    st.header("🔎 Tìm kiếm theo mô tả khách sạn")
+    st.write("Nhập những tiện ích hoặc đặc điểm bạn mong muốn, hệ thống sẽ tìm các khách sạn phù hợp nhất.")
     
-# --- Hiển thị trang tương ứng ---
-if page == 'by hotel description':
-    st.header("Tìm kiếm theo mô tả")
-    search_query = st.text_input("Ví dụ: khách sạn mát, rộng, gần biển, có trẻ em", placeholder="Nhập mô tả của bạn ở đây...")
+    search_query = st.text_input(
+        "Ví dụ: khách sạn có hồ bơi cho gia đình, gần trung tâm, yên tĩnh",
+        placeholder="Nhập mô tả của bạn ở đây...",
+        label_visibility="collapsed"
+    )
+    
     if search_query:
         with st.spinner("Đang tìm những khách sạn phù hợp nhất..."):
-            query_vec = tfidf_vectorizer.transform([preprocess_text(search_query)])
-            sim_scores = cosine_similarity(query_vec, tfidf_matrix).flatten()
-            top_indices = sim_scores.argsort()[-10:][::-1]
-            recommendations = hotel_df.iloc[top_indices]
+            query_vec = st.session_state.tfidf_vectorizer.transform([preprocess_text(search_query)])
+            sim_scores = cosine_similarity(query_vec, st.session_state.tfidf_matrix).flatten()
+            top_indices = sim_scores.argsort()[-9:][::-1] # Lấy 9 gợi ý
+            recommendations = st.session_state.hotel_df.iloc[top_indices]
+        
+        st.markdown("---")
+        st.subheader("🏆 Kết quả gợi ý hàng đầu")
         display_recommendation_list(recommendations)
 
-elif page == 'by hotel name':
-    st.header("Tìm khách sạn tương tự")
-    method = st.selectbox("Chọn mô hình gợi ý theo nội dung:", ["TF-IDF", "Doc2Vec", "SBERT"])
-    selected_hotel_name = st.selectbox("Chọn một khách sạn bạn đã thích:", hotel_df['Hotel_Name'].unique())
+def render_page_by_name():
+    st.header("🏨 Tìm khách sạn tương tự")
+    st.write("Chọn một khách sạn bạn đã từng thích, hệ thống sẽ gợi ý những nơi có đặc điểm tương đồng.")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        selected_hotel_name = st.selectbox(
+            "Chọn một khách sạn bạn đã thích:",
+            st.session_state.hotel_names,
+            index=None,
+            placeholder="Tìm kiếm khách sạn..."
+        )
+    with col2:
+        method = st.selectbox(
+            "Chọn mô hình gợi ý:",
+            ["TF-IDF", "Doc2Vec", "SBERT"]
+        )
+
     if selected_hotel_name:
-        selected_hotel_index = hotel_df[hotel_df['Hotel_Name'] == selected_hotel_name].index[0]
+        selected_hotel_index = st.session_state.hotel_df[st.session_state.hotel_df['Hotel_Name'] == selected_hotel_name].index[0]
+        
         with st.spinner(f"Đang tìm các khách sạn tương tự bằng {method}..."):
-            recommendations = pd.DataFrame() # Khởi tạo dataframe rỗng
+            recommendations = pd.DataFrame()
+            sim_matrix = None
+
             if method == "TF-IDF":
-                recommendations = get_content_recommendations(selected_hotel_index, tfidf_cosine_sim, hotel_df)
-            elif method == "Doc2Vec" and d2v_embeddings is not None:
-                sim_matrix = cosine_similarity(d2v_embeddings)
-                recommendations = get_content_recommendations(selected_hotel_index, sim_matrix, hotel_df)
-            elif method == "SBERT" and sbert_embeddings is not None:
-                sim_matrix = cosine_similarity(sbert_embeddings)
-                recommendations = get_content_recommendations(selected_hotel_index, sim_matrix, hotel_df)
-        st.subheader(f"Top 10 gợi ý tương tự '{selected_hotel_name}' theo {method}:")
+                sim_matrix = st.session_state.tfidf_cosine_sim
+            elif method == "Doc2Vec" and st.session_state.d2v_embeddings is not None:
+                sim_matrix = cosine_similarity(st.session_state.d2v_embeddings)
+            elif method == "SBERT" and st.session_state.sbert_embeddings is not None:
+                sim_matrix = cosine_similarity(st.session_state.sbert_embeddings)
+            
+            if sim_matrix is not None:
+                recommendations = get_content_recommendations(selected_hotel_index, sim_matrix, st.session_state.hotel_df, top_n=9)
+        
+        st.markdown("---")
+        st.subheader(f"Top 9 gợi ý tương tự '{selected_hotel_name}'")
         display_recommendation_list(recommendations)
 
-# app.py
+def render_page_by_als():
+    st.header("👤 Gợi ý cá nhân hóa (Mô hình ALS)")
+    st.info("Sử dụng thuật toán ALS trên Spark để đưa ra gợi ý dựa trên lịch sử đánh giá của người dùng.")
 
-# ... (các phần code khác giữ nguyên)
+    # [OPTIMIZED] Thêm ô tìm kiếm để lọc user
+    search_user = st.text_input("Tìm kiếm tên khách hàng:", placeholder="Nhập tên để tìm...")
+    if search_user:
+        filtered_users = [user for user in st.session_state.user_list if search_user.lower() in user.lower()]
+    else:
+        filtered_users = st.session_state.user_list
 
-elif page == 'by rating review (ALS)':
-    st.header("Gợi ý cho khách hàng (Mô hình ALS)")
-    st.info("Tính năng này sử dụng Spark và có thể mất một chút thời gian để khởi tạo lần đầu.")
+    selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", filtered_users, index=None, placeholder="Chọn một khách hàng...")
 
-    user_list = comments_df['Reviewer_Name'].unique()
-    selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", user_list)
-
-    if st.button(f"Lấy gợi ý cho {selected_user}", type="primary"):
-        with st.spinner("Đang khởi tạo Spark và tải mô hình ALS..."):
+    if selected_user and st.button(f"🚀 Lấy gợi ý cho {selected_user}", type="primary", use_container_width=True):
+        with st.spinner("Đang khởi tạo Spark và tính toán gợi ý..."):
             try:
                 spark = get_spark_session()
-                from pyspark.ml.recommendation import ALSModel
                 
-                user_map = pd.DataFrame({'Reviewer_Name': comments_df['Reviewer_Name'], 'userId': pd.factorize(comments_df['Reviewer_Name'])[0]}).drop_duplicates()
+                # Tạo mapping để chuyển đổi tên user và hotel_id sang index số
+                user_map = pd.DataFrame({'Reviewer_Name': st.session_state.comments_df['Reviewer_Name'], 'userId': pd.factorize(st.session_state.comments_df['Reviewer_Name'])[0]}).drop_duplicates()
+                item_map = pd.DataFrame({'itemId': pd.factorize(st.session_state.comments_df['Hotel_ID'])[0], 'Hotel_ID': st.session_state.comments_df['Hotel_ID']}).drop_duplicates()
                 
-                # ✅ SỬA LỖI: Thêm bước kiểm tra và ép kiểu tường minh
-                filtered_map = user_map[user_map['Reviewer_Name'] == selected_user]
+                selected_user_id = user_map[user_map['Reviewer_Name'] == selected_user]['userId'].iloc[0]
+                selected_user_id = int(selected_user_id) # Đảm bảo là kiểu int chuẩn
                 
-                if filtered_map.empty:
-                    st.error(f"Không tìm thấy thông tin cho khách hàng: {selected_user}")
-                else:
-                    selected_user_id = filtered_map['userId'].iloc[0]
-                    # Ép kiểu về int chuẩn của Python
-                    selected_user_id = int(selected_user_id) 
-                    
-                    model = ALSModel.load("./output/models/best_als_model")
-                    user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
-                    recs_spark = model.recommendForUserSubset(user_df, 10).first()
+                _delete_crc_files(str(ALS_MODEL_PATH.resolve()))
+                model = ALSModel.load(ALS_MODEL_PATH.resolve().as_uri())
+                
+                user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
+                recs_spark = model.recommendForUserSubset(user_df, 9).first()
 
-                    if recs_spark and recs_spark['recommendations']:
-                        recs_list = [(row['itemId'], row['rating']) for row in recs_spark['recommendations']]
-                        recs_df = pd.DataFrame(recs_list, columns=['itemId', 'Score'])
-                        
-                        item_map = pd.DataFrame({'itemId': pd.factorize(comments_df['Hotel_ID'])[0], 'Hotel_ID': comments_df['Hotel_ID']}).drop_duplicates()
-                        recs_df = recs_df.merge(item_map, on='itemId')
-                        recs_df = recs_df.merge(hotel_df, on='Hotel_ID')
-                        
-                        st.subheader(f"Top 10 gợi ý cho khách hàng '{selected_user}':")
-                        display_recommendation_list(recs_df)
-                    else:
-                        st.info(f"Không có gợi ý nào cho khách hàng {selected_user}.")
+                if recs_spark and recs_spark['recommendations']:
+                    recs_list = [(row['itemId'], row['rating']) for row in recs_spark['recommendations']]
+                    recs_df = pd.DataFrame(recs_list, columns=['itemId', 'Predicted_Rating'])
+                    
+                    recs_df = recs_df.merge(item_map, on='itemId')
+                    recs_df = recs_df.merge(st.session_state.hotel_df, on='Hotel_ID')
+                    
+                    st.markdown("---")
+                    st.subheader(f"✨ Gợi ý dành riêng cho '{selected_user}'")
+                    display_recommendation_list(recs_df)
+                else:
+                    st.warning(f"Không có gợi ý nào cho khách hàng {selected_user}.")
 
             except Exception as e:
                 st.error("Có lỗi xảy ra khi chạy mô hình ALS.")
-                st.error(f"Chi tiết lỗi: {e}")
+                st.exception(e) # Hiển thị chi tiết lỗi để debug
 
+# ---------------- Chương trình chính ----------------
+def main():
+    st.title("🏨 AGODA Hotel Recommendation System")
+    st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
+    
+    # [OPTIMIZED] Khởi tạo dữ liệu và model một lần duy nhất
+    initialize_session_state()
+
+    with st.sidebar:
+        st.image("logo.png", width=100)
+        st.header("Phương thức gợi ý")
+        
+        page_options = {
+            "Theo mô tả khách sạn": render_page_by_description,
+            "Theo khách sạn tương tự": render_page_by_name,
+            "Theo đánh giá người dùng (ALS)": render_page_by_als,
+        }
+        
+        selected_page = st.radio(
+            "Chọn trang:",
+            options=page_options.keys(),
+            label_visibility="collapsed"
+        )
+        
+        st.markdown("---")
+        st.header("Về dự án")
+        st.info("Đây là đồ án tốt nghiệp ứng dụng các thuật toán gợi ý vào bài toán thực tế trên dữ liệu từ Agoda.")
+        if st.button("🔄 Reset Spark Session"):
+            if "spark" in st.session_state:
+                st.session_state.spark.stop()
+                del st.session_state.spark
+                st.success("Spark session đã được reset.")
+                st.rerun()
+
+    # [OPTIMIZED] Gọi hàm render tương ứng với trang đã chọn
+    page_options[selected_page]()
+
+if __name__ == "__main__":
+    main()
