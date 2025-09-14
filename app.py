@@ -194,23 +194,20 @@ def display_recommendation_list(df_recommendations):
         st.info("Không tìm thấy gợi ý nào phù hợp.")
         return
 
-    # Xác định số lượng gợi ý
     num_recommendations = len(df_recommendations)
-    # Tính số hàng cần thiết, mỗi hàng 3 cột
     num_rows = (num_recommendations + 2) // 3
-
     recommendations_iterator = df_recommendations.iterrows()
 
     for i in range(num_rows):
-        # Tạo ra một hàng mới với 3 cột
         cols = st.columns(3)
         for j in range(3):
             try:
-                # Lấy khách sạn tiếp theo từ danh sách
                 index, data = next(recommendations_iterator)
-                with cols[j]:  # Đặt nội dung vào cột tương ứng
+                with cols[j]:
                     with st.container(border=True):
-                        st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_column_width=True)
+                        # [FIX] Đổi tên tham số use_column_width -> use_container_width
+                        st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_container_width=True)
+                        
                         st.subheader(data['Hotel_Name'])
                         st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
 
@@ -221,9 +218,7 @@ def display_recommendation_list(df_recommendations):
                         with st.expander("Xem mô tả"):
                             st.write(data.get('Hotel_Description', 'Không có mô tả.'))
             except StopIteration:
-                # Nếu đã hết khách sạn để hiển thị thì dừng lại
                 break
-
 
 # ---------------- [OPTIMIZED] Các hàm render cho từng trang ----------------
 def render_page_by_description():
@@ -360,6 +355,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
