@@ -344,15 +344,14 @@ def main():
     st.title("🏨 AGODA Hotel Recommendation System")
     st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
     st.markdown("""
-    <style>
-        .image-container img {
-            width: 100%;
-            height: 200px; /* <- Bạn có thể thay đổi chiều cao này */
-            object-fit: cover;
-        }
-    </style>
-""", unsafe_allow_html=True)
-
+        <style>
+            .image-container img {
+                width: 100%;
+                height: 200px; /* <- Bạn có thể thay đổi chiều cao này */
+                object-fit: cover;
+            }
+        </style>
+    """, unsafe_allow_html=True)
     # Khởi tạo dữ liệu và model một lần duy nhất
     initialize_session_state()
     # [OPTIMIZED] Khởi tạo dữ liệu và model một lần duy nhất
@@ -389,6 +388,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
