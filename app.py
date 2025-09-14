@@ -108,6 +108,10 @@ def load_main_data():
     comments_df.columns = comments_df.columns.str.strip()
     comments_df = auto_rename_columns(comments_df, {"Reviewer_Name": ["reviewer_name", "user_name"], "Hotel_ID": ["hotel_id"]})
     
+    # [FIX] Thêm 2 dòng sau để làm sạch cột Reviewer_Name
+    comments_df.dropna(subset=['Reviewer_Name'], inplace=True)
+    comments_df['Reviewer_Name'] = comments_df['Reviewer_Name'].astype(str)
+
     missing = [c for c in ["Reviewer_Name", "Hotel_ID"] if c not in comments_df.columns]
     if missing:
         st.error(f"Thiếu cột bắt buộc trong file `{HOTEL_COMMENTS_FILE.name}`: {', '.join(missing)}")
@@ -348,3 +352,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
