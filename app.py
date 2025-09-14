@@ -22,6 +22,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+import random # [NEW] Thêm thư viện random
+
+# ... các dòng import khác ...
+
+# [NEW] Tạo một danh sách chứa các link ảnh mặc định
+FALLBACK_IMAGE_URLS = [
+    "https://images.pexels.com/photos/1268871/pexels-photo-1268871.jpeg",
+    "https://images.pexels.com/photos/1179156/pexels-photo-1179156.jpeg",
+    "https://images.pexels.com/photos/33818491/pexels-photo-33818491.jpeg",
+    "https://images.pexels.com/photos/4825701/pexels-photo-4825701.jpeg",
+    "https://images.pexels.com/photos/2684260/pexels-photo-2684260.jpeg",
+    "https://images.pexels.com/photos/2992314/pexels-photo-2992314.jpeg",
+    "https://images.pexels.com/photos/940856/pexels-photo-940856.jpeg",
+    "https://images.pexels.com/photos/59924/pexels-photo-59924.jpeg",
+    "https://images.pexels.com/photos/2983472/pexels-photo-2983472.jpeg",
+    "https://images.pexels.com/photos/2506988/pexels-photo-2506988.jpeg"
+]
+
 # ---------------- [OPTIMIZED] Hằng số và đường dẫn ----------------
 DATA_PATH = Path("./data")
 MODEL_PATH = Path("./outputs/models")
@@ -205,8 +223,10 @@ def display_recommendation_list(df_recommendations):
                 index, data = next(recommendations_iterator)
                 with cols[j]:
                     with st.container(border=True):
-                        # [FIX] Đổi tên tham số use_column_width -> use_container_width
-                        st.image(data.get('Image_URL', 'https://images.pexels.com/photos/2506988/pexels-photo-2506988.jpeg'), use_container_width=True)
+                        # [MODIFIED] Lấy ảnh mặc định ngẫu nhiên từ danh sách FALLBACK_IMAGE_URLS
+                        fallback_image = random.choice(FALLBACK_IMAGE_URLS)
+                        image_url = data.get('Image_URL', fallback_image)
+                        st.image(image_url, use_container_width=True)
                         
                         st.subheader(data['Hotel_Name'])
                         st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
@@ -355,6 +375,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
