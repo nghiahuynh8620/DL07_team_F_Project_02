@@ -27,7 +27,8 @@ DATA_PATH = Path("./data")
 MODEL_PATH = Path("./outputs/models")
 HOTEL_INFO_FILE = DATA_PATH / "hotel_info.csv"
 HOTEL_COMMENTS_FILE = DATA_PATH / "hotel_comments.csv"
-ALS_MODEL_PATH = MODEL_PATH / "best_als_model"
+# ALS_MODEL_PATH = MODEL_PATH / "best_als_model"
+ALS_RECOMMENDATIONS_FILE = DATA_PATH / "als_recommendations.csv"
 D2V_EMBEDDINGS_FILE = MODEL_PATH / "d2v_emb.npy"
 SBERT_EMBEDDINGS_FILE = MODEL_PATH / "sbert_emb.npy"
 
@@ -155,10 +156,10 @@ def initialize_session_state():
     if "initialized" in st.session_state:
         return
 
-    with st.spinner("Đang chuẩn bị dữ liệu và mô hình cho lần đầu tiên..."):
+    with st.spinner("Đang chuẩn bị dữ liệu..."):
         st.session_state.hotel_df, st.session_state.comments_df = load_main_data()
         
-        # Content-based models
+        # Content-based models (giữ nguyên)
         tfidf_recommender = create_tfidf_recommender(st.session_state.hotel_df)
         st.session_state.tfidf_vectorizer = tfidf_recommender[0]
         st.session_state.tfidf_matrix = tfidf_recommender[1]
@@ -167,6 +168,14 @@ def initialize_session_state():
         st.session_state.d2v_embeddings = load_embeddings(D2V_EMBEDDINGS_FILE)
         st.session_state.sbert_embeddings = load_embeddings(SBERT_EMBEDDINGS_FILE)
         
+        # [REPLACED] Tải file gợi ý ALS đã được tính toán sẵn
+        try:
+            st.session_state.als_recs_df = pd.read_csv(ALS_RECOMMENDATIONS_FILE)
+        except FileNotFoundError:
+            st.error(f"Lỗi: Không tìm thấy file `{ALS_RECOMMENDATIONS_FILE}`.")
+            # Tạo DataFrame rỗng để tránh lỗi ở các phần khác
+            st.session_state.als_recs_df = pd.DataFrame(columns=['UserName', 'RecommendedHotel'])
+
         # Tạo sẵn danh sách hotel và user để dùng trong UI
         st.session_state.hotel_names = st.session_state.hotel_df['Hotel_Name'].unique()
         st.session_state.user_list = sorted(st.session_state.comments_df['Reviewer_Name'].unique())
@@ -278,52 +287,39 @@ def render_page_by_name():
         display_recommendation_list(recommendations)
 
 def render_page_by_als():
-    st.header("👤 Gợi ý cá nhân hóa (Mô hình ALS)")
-    st.info("Sử dụng thuật toán ALS trên Spark để đưa ra gợi ý dựa trên lịch sử đánh giá của người dùng.")
+    st.header("👤 Gợi ý cá nhân hóa (từ File có sẵn)")
+    st.info("Tính năng này đọc kết quả gợi ý đã được tính toán trước từ file `als_recommendations.csv`.")
 
-    # [OPTIMIZED] Thêm ô tìm kiếm để lọc user
+    # Lấy danh sách user CÓ trong file gợi ý để lựa chọn
+    available_users = sorted(st.session_state.als_recs_df['UserName'].unique())
+    
     search_user = st.text_input("Tìm kiếm tên khách hàng:", placeholder="Nhập tên để tìm...")
     if search_user:
-        filtered_users = [user for user in st.session_state.user_list if search_user.lower() in user.lower()]
+        filtered_users = [user for user in available_users if search_user.lower() in user.lower()]
     else:
-        filtered_users = st.session_state.user_list
+        filtered_users = available_users
 
     selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", filtered_users, index=None, placeholder="Chọn một khách hàng...")
 
     if selected_user and st.button(f"🚀 Lấy gợi ý cho {selected_user}", type="primary", use_container_width=True):
-        with st.spinner("Đang khởi tạo Spark và tính toán gợi ý..."):
-            try:
-                spark = get_spark_session()
-                
-                # Tạo mapping để chuyển đổi tên user và hotel_id sang index số
-                user_map = pd.DataFrame({'Reviewer_Name': st.session_state.comments_df['Reviewer_Name'], 'userId': pd.factorize(st.session_state.comments_df['Reviewer_Name'])[0]}).drop_duplicates()
-                item_map = pd.DataFrame({'itemId': pd.factorize(st.session_state.comments_df['Hotel_ID'])[0], 'Hotel_ID': st.session_state.comments_df['Hotel_ID']}).drop_duplicates()
-                
-                selected_user_id = user_map[user_map['Reviewer_Name'] == selected_user]['userId'].iloc[0]
-                selected_user_id = int(selected_user_id) # Đảm bảo là kiểu int chuẩn
-                
-                _delete_crc_files(str(ALS_MODEL_PATH.resolve()))
-                model = model = ALSModel.load(str(ALS_MODEL_PATH.resolve()))
-                
-                user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
-                recs_spark = model.recommendForUserSubset(user_df, 9).first()
+        with st.spinner("Đang lấy dữ liệu gợi ý..."):
+            # [REPLACED] Lọc DataFrame thay vì chạy model
+            recs_df = st.session_state.als_recs_df[st.session_state.als_recs_df['UserName'] == selected_user]
 
-                if recs_spark and recs_spark['recommendations']:
-                    recs_list = [(row['itemId'], row['rating']) for row in recs_spark['recommendations']]
-                    recs_df = pd.DataFrame(recs_list, columns=['itemId', 'Predicted_Rating'])
-                    
-                    recs_df = recs_df.merge(item_map, on='itemId')
-                    recs_df = recs_df.merge(st.session_state.hotel_df, on='Hotel_ID')
-                    
-                    st.markdown("---")
-                    st.subheader(f"✨ Gợi ý dành riêng cho '{selected_user}'")
-                    display_recommendation_list(recs_df)
-                else:
-                    st.warning(f"Không có gợi ý nào cho khách hàng {selected_user}.")
-
-            except Exception as e:
-                st.error("Có lỗi xảy ra khi chạy mô hình ALS.")
-                st.exception(e) # Hiển thị chi tiết lỗi để debug
+            if not recs_df.empty:
+                # Trộn kết quả với thông tin khách sạn đầy đủ
+                merged_df = recs_df.merge(
+                    st.session_state.hotel_df,
+                    left_on='RecommendedHotel',
+                    right_on='Hotel_Name',
+                    how='inner'  # Chỉ giữ lại những khách sạn có trong cả 2 file
+                )
+                
+                st.markdown("---")
+                st.subheader(f"✨ Gợi ý dành riêng cho '{selected_user}'")
+                display_recommendation_list(merged_df)
+            else:
+                st.warning(f"Không tìm thấy gợi ý nào cho khách hàng '{selected_user}' trong file.")
 
 # ---------------- Chương trình chính ----------------
 def main():
@@ -352,17 +348,18 @@ def main():
         st.markdown("---")
         st.header("Về dự án")
         st.info("Đây là đồ án tốt nghiệp ứng dụng các thuật toán gợi ý vào bài toán thực tế trên dữ liệu từ Agoda.")
-        if st.button("🔄 Reset Spark Session"):
-            if "spark" in st.session_state:
-                st.session_state.spark.stop()
-                del st.session_state.spark
-                st.success("Spark session đã được reset.")
-                st.rerun()
+        # if st.button("🔄 Reset Spark Session"):
+        #     if "spark" in st.session_state:
+        #         st.session_state.spark.stop()
+        #         del st.session_state.spark
+        #         st.success("Spark session đã được reset.")
+        #         st.rerun()
 
     # [OPTIMIZED] Gọi hàm render tương ứng với trang đã chọn
     page_options[selected_page]()
 
 if __name__ == "__main__":
     main()
+
 
 
