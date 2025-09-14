@@ -223,10 +223,13 @@ def display_recommendation_list(df_recommendations):
                 index, data = next(recommendations_iterator)
                 with cols[j]:
                     with st.container(border=True):
-                        # [MODIFIED] Lấy ảnh mặc định ngẫu nhiên từ danh sách FALLBACK_IMAGE_URLS
                         fallback_image = random.choice(FALLBACK_IMAGE_URLS)
                         image_url = data.get('Image_URL', fallback_image)
+                        
+                        # [MODIFIED] Bọc ảnh trong div với class="image-container"
+                        st.markdown(f'<div class="image-container">', unsafe_allow_html=True)
                         st.image(image_url, use_container_width=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
                         
                         st.subheader(data['Hotel_Name'])
                         st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
@@ -340,7 +343,18 @@ def render_page_by_als():
 def main():
     st.title("🏨 AGODA Hotel Recommendation System")
     st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
-    
+    st.markdown("""
+    <style>
+        .image-container img {
+            width: 100%;
+            height: 200px; /* <- Bạn có thể thay đổi chiều cao này */
+            object-fit: cover;
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+    # Khởi tạo dữ liệu và model một lần duy nhất
+    initialize_session_state()
     # [OPTIMIZED] Khởi tạo dữ liệu và model một lần duy nhất
     initialize_session_state()
 
@@ -375,6 +389,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
