@@ -206,7 +206,7 @@ def display_recommendation_list(df_recommendations):
                 with cols[j]:
                     with st.container(border=True):
                         # [FIX] Đổi tên tham số use_column_width -> use_container_width
-                        st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_container_width=True)
+                        st.image(data.get('Image_URL', 'https://images.pexels.com/photos/2506988/pexels-photo-2506988.jpeg'), use_container_width=True)
                         
                         st.subheader(data['Hotel_Name'])
                         st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
@@ -355,6 +355,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
