@@ -176,6 +176,7 @@ def initialize_session_state():
 
 
 # ---------------- [OPTIMIZED] Giao diện hiển thị gợi ý ----------------
+# [FIX] Thay thế toàn bộ hàm cũ bằng hàm này
 def display_recommendation_list(df_recommendations):
     """
     Hiển thị danh sách khách sạn được gợi ý với giao diện chuyên nghiệp hơn.
@@ -183,25 +184,36 @@ def display_recommendation_list(df_recommendations):
     if df_recommendations.empty:
         st.info("Không tìm thấy gợi ý nào phù hợp.")
         return
-    
-    #     cols = st.columns(3) # Tạo 3 cột để hiển thị
-    for i, row in enumerate(df_recommendations.iterrows()):
-        index, data = row
-        with cols[i % 3]: # Lần lượt điền vào từng cột
-            with st.container(border=True):
-                st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_column_width=True)
-                
-                st.subheader(data['Hotel_Name'])
-                st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
-                
-                metric_cols = st.columns(2)
-                with metric_cols[0]:
-                    st.metric(label="⭐ Hạng", value=f"{data.get('Hotel_Rank', 'N/A')}")
-                with metric_cols[1]:
-                    st.metric(label="💯 Điểm", value=f"{data.get('Total_Score', 'N/A')}")
-                
-                with st.expander("Xem mô tả"):
-                    st.write(data.get('Hotel_Description', 'Không có mô tả.'))
+
+    # Xác định số lượng gợi ý
+    num_recommendations = len(df_recommendations)
+    # Tính số hàng cần thiết, mỗi hàng 3 cột
+    num_rows = (num_recommendations + 2) // 3
+
+    recommendations_iterator = df_recommendations.iterrows()
+
+    for i in range(num_rows):
+        # Tạo ra một hàng mới với 3 cột
+        cols = st.columns(3)
+        for j in range(3):
+            try:
+                # Lấy khách sạn tiếp theo từ danh sách
+                index, data = next(recommendations_iterator)
+                with cols[j]:  # Đặt nội dung vào cột tương ứng
+                    with st.container(border=True):
+                        st.image(data.get('Image_URL', 'https://i.imgur.com/uR3sYyP.jpeg'), use_column_width=True)
+                        st.subheader(data['Hotel_Name'])
+                        st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
+
+                        metric_cols = st.columns(2)
+                        metric_cols[0].metric(label="⭐ Hạng", value=f"{data.get('Hotel_Rank', 'N/A')}")
+                        metric_cols[1].metric(label="💯 Điểm", value=f"{data.get('Total_Score', 'N/A')}")
+
+                        with st.expander("Xem mô tả"):
+                            st.write(data.get('Hotel_Description', 'Không có mô tả.'))
+            except StopIteration:
+                # Nếu đã hết khách sạn để hiển thị thì dừng lại
+                break
 
 
 # ---------------- [OPTIMIZED] Các hàm render cho từng trang ----------------
@@ -291,7 +303,7 @@ def render_page_by_als():
                 selected_user_id = int(selected_user_id) # Đảm bảo là kiểu int chuẩn
                 
                 _delete_crc_files(str(ALS_MODEL_PATH.resolve()))
-                model = ALSModel.load(ALS_MODEL_PATH.resolve().as_uri())
+                model = model = ALSModel.load(str(ALS_MODEL_PATH.resolve()))
                 
                 user_df = spark.createDataFrame([(selected_user_id,)], ["userId"])
                 recs_spark = model.recommendForUserSubset(user_df, 9).first()
@@ -352,4 +364,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
