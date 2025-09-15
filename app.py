@@ -311,11 +311,11 @@ def render_page_by_als():
     # Lấy danh sách user CÓ trong file gợi ý để lựa chọn
     available_users = sorted(st.session_state.als_recs_df['UserName'].unique())
     
-    search_user = st.text_input("Tìm kiếm tên khách hàng:", placeholder="Nhập tên để tìm...")
-    if search_user:
-        filtered_users = [user for user in available_users if search_user.lower() in user.lower()]
-    else:
-        filtered_users = available_users
+    # search_user = st.text_input("Tìm kiếm tên khách hàng:", placeholder="Nhập tên để tìm...")
+    # if search_user:
+    #     filtered_users = [user for user in available_users if search_user.lower() in user.lower()]
+    # else:
+    filtered_users = available_users
 
     selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", filtered_users, index=None, placeholder="Chọn một khách hàng...")
 
@@ -388,6 +388,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
