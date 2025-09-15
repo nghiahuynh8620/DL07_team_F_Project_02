@@ -226,7 +226,6 @@ def display_recommendation_list(df_recommendations):
                         fallback_image = random.choice(FALLBACK_IMAGE_URLS)
                         image_url = data.get('Image_URL', fallback_image)
                         
-                        # [MODIFIED] Bọc ảnh trong div với class="image-container"
                         st.markdown(f'<div class="image-container">', unsafe_allow_html=True)
                         st.image(image_url, use_container_width=True)
                         st.markdown('</div>', unsafe_allow_html=True)
@@ -235,8 +234,24 @@ def display_recommendation_list(df_recommendations):
                         st.caption(f"📍 {data.get('Hotel_Address', 'N/A')}")
 
                         metric_cols = st.columns(2)
-                        metric_cols[0].metric(label="⭐ Hạng", value=f"{data.get('Hotel_Rank', 'N/A')}")
-                        metric_cols[1].metric(label="💯 Điểm", value=f"{data.get('Total_Score', 'N/A')}")
+
+                        # [MODIFIED] Xử lý hiển thị cho Hạng và Điểm
+                        with metric_cols[0]:
+                            rank_value = str(data.get('Hotel_Rank', 'N/A')).strip()
+                            # Kiểm tra nếu giá trị là thông tin trống
+                            if 'no info' in rank_value.lower() or 'n/a' in rank_value.lower():
+                                st.markdown("⭐ **Hạng**")
+                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                            else:
+                                st.metric(label="⭐ Hạng", value=rank_value)
+                        
+                        with metric_cols[1]:
+                            score_value = str(data.get('Total_Score', 'N/A')).strip()
+                            if 'no info' in score_value.lower() or 'n/a' in score_value.lower():
+                                st.markdown("💯 **Điểm**")
+                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                            else:
+                                st.metric(label="💯 Điểm", value=score_value)
 
                         with st.expander("Xem mô tả"):
                             st.write(data.get('Hotel_Description', 'Không có mô tả.'))
@@ -388,6 +403,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
