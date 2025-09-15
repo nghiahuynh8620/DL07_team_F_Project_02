@@ -358,6 +358,12 @@ def render_page_by_als():
 def main():
     st.title("🏨 AGODA Hotel Recommendation System")
     st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
+    
+    # [NEW] Thêm thông tin GVHD và HV thực hiện
+    st.markdown("<p style='color: #007bff; font-weight: bold;'>GVHD: Khuất Thùy Phương</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #007bff; font-weight: bold;'>HV thực hiện: Nguyễn Thanh Bình - Nguyễn Tuấn Duy</p>", unsafe_allow_html=True)
+
+    # [NEW] Thêm CSS để chỉnh kích thước ảnh đồng đều
     st.markdown("""
         <style>
             .image-container img {
@@ -367,9 +373,8 @@ def main():
             }
         </style>
     """, unsafe_allow_html=True)
+
     # Khởi tạo dữ liệu và model một lần duy nhất
-    initialize_session_state()
-    # [OPTIMIZED] Khởi tạo dữ liệu và model một lần duy nhất
     initialize_session_state()
 
     with st.sidebar:
@@ -391,18 +396,13 @@ def main():
         st.markdown("---")
         st.header("Về dự án")
         st.info("Đây là đồ án tốt nghiệp ứng dụng các thuật toán gợi ý vào bài toán thực tế trên dữ liệu từ Agoda.")
-        # if st.button("🔄 Reset Spark Session"):
-        #     if "spark" in st.session_state:
-        #         st.session_state.spark.stop()
-        #         del st.session_state.spark
-        #         st.success("Spark session đã được reset.")
-        #         st.rerun()
 
-    # [OPTIMIZED] Gọi hàm render tương ứng với trang đã chọn
+    # Gọi hàm render tương ứng với trang đã chọn
     page_options[selected_page]()
 
 if __name__ == "__main__":
     main()
+
 
 
 
