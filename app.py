@@ -241,7 +241,7 @@ def display_recommendation_list(df_recommendations):
                             # Kiểm tra nếu giá trị là thông tin trống
                             if 'no info' in rank_value.lower() or 'n/a' in rank_value.lower():
                                 st.markdown("⭐ **Hạng**")
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                st.markdown(f"<p style='font-size:8px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
                                 st.metric(label="⭐ Hạng", value=rank_value)
                         
@@ -249,7 +249,7 @@ def display_recommendation_list(df_recommendations):
                             score_value = str(data.get('Total_Score', 'N/A')).strip()
                             if 'no info' in score_value.lower() or 'n/a' in score_value.lower():
                                 st.markdown("💯 **Điểm**")
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                st.markdown(f"<p style='font-size:8px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
                                 st.metric(label="💯 Điểm", value=score_value)
 
@@ -403,6 +403,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
