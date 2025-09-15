@@ -235,25 +235,23 @@ def display_recommendation_list(df_recommendations):
 
                         metric_cols = st.columns(2)
 
-                        # [MODIFIED] Xử lý hiển thị cho Hạng và Điểm
                         with metric_cols[0]:
                             rank_value = str(data.get('Hotel_Rank', 'N/A')).strip()
-                            # Kiểm tra nếu giá trị là thông tin trống
+                            st.markdown("⭐ **Hạng**") # Dùng label chung để thẳng hàng
                             if 'no info' in rank_value.lower() or 'n/a' in rank_value.lower():
-                                st.markdown("⭐ **Hạng**")
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                st.markdown(f"<p style='font-size:12px !important; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
-                                st.metric(label="⭐ Hạng", value=rank_value)
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                # [MODIFIED] Thay thế st.metric bằng st.markdown với font-size tùy chỉnh
+                                st.markdown(f"<p style='font-size: 20px; font-weight: bold;'>{rank_value}</p>", unsafe_allow_html=True)
                         
                         with metric_cols[1]:
                             score_value = str(data.get('Total_Score', 'N/A')).strip()
+                            st.markdown("💯 **Điểm**") # Dùng label chung để thẳng hàng
                             if 'no info' in score_value.lower() or 'n/a' in score_value.lower():
-                                st.markdown("💯 **Điểm**")
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                st.markdown(f"<p style='font-size:12px !important; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
-                                st.metric(label="💯 Điểm", value=score_value)
-                                st.markdown(f"<p style='font-size:14px; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
+                                # [MODIFIED] Thay thế st.metric bằng st.markdown với font-size tùy chỉnh
+                                st.markdown(f"<p style='font-size: 20px; font-weight: bold;'>{score_value}</p>", unsafe_allow_html=True)
 
                         with st.expander("Xem mô tả"):
                             st.write(data.get('Hotel_Description', 'Không có mô tả.'))
@@ -405,6 +403,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
