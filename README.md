@@ -96,4 +96,4 @@ Nếu bạn muốn đóng góp:
 
 ## 📝 Liên hệ
 
-- Thành viên nhóm : **Nghĩa Huỳnh** , **Nguyễn Ngọc Huy** et al.  
+- Thành viên nhóm F: **Nghĩa Huỳnh** , **Nguyễn Ngọc Huy**
