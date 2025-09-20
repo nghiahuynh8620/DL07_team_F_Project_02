@@ -96,4 +96,4 @@ Nếu bạn muốn đóng góp:
 
 ## 📝 Liên hệ
 
-- Tác giả hoặc nhóm: **Nghĩa Huỳnh** , **Nguyễn Ngọc Huy** et al.  
+- Thành viên nhóm : **Nghĩa Huỳnh** , **Nguyễn Ngọc Huy** et al.  
