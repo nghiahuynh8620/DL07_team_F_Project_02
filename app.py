@@ -229,20 +229,18 @@ def display_recommendation_list(df_recommendations):
 
                         with metric_cols[0]:
                             rank_value = str(data.get('Hotel_Rank', 'N/A')).strip()
-                            st.markdown("⭐ **Hạng**") # Dùng label chung để thẳng hàng
+                            st.markdown("⭐ **Hạng**")
                             if 'no info' in rank_value.lower() or 'n/a' in rank_value.lower():
                                 st.markdown(f"<p style='font-size:12px !important; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
-                                # [MODIFIED] Thay thế st.metric bằng st.markdown với font-size tùy chỉnh
                                 st.markdown(f"<p style='font-size: 16px; font-weight: bold;'>{rank_value}</p>", unsafe_allow_html=True)
                         
                         with metric_cols[1]:
                             score_value = str(data.get('Total_Score', 'N/A')).strip()
-                            st.markdown("💯 **Điểm**") # Dùng label chung để thẳng hàng
+                            st.markdown("💯 **Điểm**") 
                             if 'no info' in score_value.lower() or 'n/a' in score_value.lower():
                                 st.markdown(f"<p style='font-size:12px !important; color: #808080;'><i>Không có</i></p>", unsafe_allow_html=True)
                             else:
-                                # [MODIFIED] Thay thế st.metric bằng st.markdown với font-size tùy chỉnh
                                 st.markdown(f"<p style='font-size: 16px; font-weight: bold;'>{score_value}</p>", unsafe_allow_html=True)
 
                         with st.expander("Xem mô tả"):
@@ -265,7 +263,7 @@ def render_page_by_description():
         with st.spinner("Đang tìm những khách sạn phù hợp nhất..."):
             query_vec = st.session_state.tfidf_vectorizer.transform([preprocess_text(search_query)])
             sim_scores = cosine_similarity(query_vec, st.session_state.tfidf_matrix).flatten()
-            top_indices = sim_scores.argsort()[-9:][::-1] # Lấy 9 gợi ý
+            top_indices = sim_scores.argsort()[-9:][::-1]
             recommendations = st.session_state.hotel_df.iloc[top_indices]
         
         st.markdown("---")
@@ -388,6 +386,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
