@@ -8,7 +8,7 @@ import os
 import glob
 from pathlib import Path
 
-# [OPTIMIZED] Import các thư viện ML/DL ở đây
+#Import các thư viện ML/DL ở đây
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from pyspark.sql import SparkSession
@@ -22,11 +22,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-import random # [NEW] Thêm thư viện random
+import random 
 
-# ... các dòng import khác ...
-
-# [NEW] Tạo một danh sách chứa các link ảnh mặc định
+#Tạo một danh sách chứa các link ảnh mặc định
 FALLBACK_IMAGE_URLS = [
     "https://images.pexels.com/photos/1268871/pexels-photo-1268871.jpeg",
     "https://images.pexels.com/photos/1179156/pexels-photo-1179156.jpeg",
@@ -40,7 +38,7 @@ FALLBACK_IMAGE_URLS = [
     "https://images.pexels.com/photos/2506988/pexels-photo-2506988.jpeg"
 ]
 
-# ---------------- [OPTIMIZED] Hằng số và đường dẫn ----------------
+# ----------------  Hằng số và đường dẫn ----------------
 DATA_PATH = Path("./data")
 MODEL_PATH = Path("./outputs/models")
 HOTEL_INFO_FILE = DATA_PATH / "hotel_info.csv"
@@ -51,7 +49,7 @@ D2V_EMBEDDINGS_FILE = MODEL_PATH / "d2v_emb.npy"
 SBERT_EMBEDDINGS_FILE = MODEL_PATH / "sbert_emb.npy"
 
 
-# ---------------- [OPTIMIZED] Quản lý Spark Session ----------------
+# ----------------  Quản lý Spark Session ----------------
 def get_spark_session():
     """
     Khởi tạo và trả về một SparkSession, cache trong st.session_state.
@@ -66,7 +64,6 @@ def get_spark_session():
             .config("spark.hadoop.fs.file.impl.disable.cache", "true")
             .getOrCreate()
         )
-        # Ép lại cấu hình trong HadoopConf để đảm bảo
         st.session_state.spark.sparkContext._jsc.hadoopConfiguration().set(
             "fs.file.impl", "org.apache.hadoop.fs.RawLocalFileSystem"
         )
@@ -80,9 +77,6 @@ def _delete_crc_files(dir_path: str):
         except OSError as e:
             st.warning(f"Không thể xóa file CRC {fp}: {e}")
 
-
-# ---------------- Các hàm tải và xử lý dữ liệu (giữ nguyên logic) ----------------
-# Các hàm gốc được giữ nguyên, chỉ thêm cache vào session_state
 def normalize_col(s: str) -> str:
     return re.sub(r'[^a-z0-9]+', '_', str(s).lower()).strip('_')
 
@@ -127,7 +121,6 @@ def load_main_data():
     comments_df.columns = comments_df.columns.str.strip()
     comments_df = auto_rename_columns(comments_df, {"Reviewer_Name": ["reviewer_name", "user_name"], "Hotel_ID": ["hotel_id"]})
     
-    # [FIX] Thêm 2 dòng sau để làm sạch cột Reviewer_Name
     comments_df.dropna(subset=['Reviewer_Name'], inplace=True)
     comments_df['Reviewer_Name'] = comments_df['Reviewer_Name'].astype(str)
 
@@ -166,7 +159,7 @@ def get_content_recommendations(hotel_index, sim_matrix, df, top_n=10):
     return df.iloc[hotel_indices]
 
 
-# ---------------- [OPTIMIZED] Hàm khởi tạo state ----------------
+# ----------------  Hàm khởi tạo state ----------------
 def initialize_session_state():
     """
     Tải tất cả dữ liệu và model vào st.session_state để tránh tải lại.
@@ -202,8 +195,7 @@ def initialize_session_state():
     st.success("Sẵn sàng!", icon="✅")
 
 
-# ---------------- [OPTIMIZED] Giao diện hiển thị gợi ý ----------------
-# [FIX] Thay thế toàn bộ hàm cũ bằng hàm này
+# ----------------  Giao diện hiển thị gợi ý ----------------
 def display_recommendation_list(df_recommendations):
     """
     Hiển thị danh sách khách sạn được gợi ý với giao diện chuyên nghiệp hơn.
@@ -258,7 +250,7 @@ def display_recommendation_list(df_recommendations):
             except StopIteration:
                 break
 
-# ---------------- [OPTIMIZED] Các hàm render cho từng trang ----------------
+# ---------------- Các hàm render cho từng trang ----------------
 def render_page_by_description():
     st.header("🔎 Tìm kiếm theo mô tả khách sạn")
     st.write("Nhập những tiện ích hoặc đặc điểm bạn mong muốn, hệ thống sẽ tìm các khách sạn phù hợp nhất.")
@@ -323,13 +315,7 @@ def render_page_by_als():
     st.header("👤 Gợi ý cá nhân hóa (từ File có sẵn)")
     st.info("Tính năng này đọc kết quả gợi ý đã được tính toán trước từ file `als_recommendations.csv`.")
 
-    # Lấy danh sách user CÓ trong file gợi ý để lựa chọn
     available_users = sorted(st.session_state.als_recs_df['UserName'].unique())
-    
-    # search_user = st.text_input("Tìm kiếm tên khách hàng:", placeholder="Nhập tên để tìm...")
-    # if search_user:
-    #     filtered_users = [user for user in available_users if search_user.lower() in user.lower()]
-    # else:
     filtered_users = available_users
 
     selected_user = st.selectbox("Chọn một khách hàng để xem gợi ý:", filtered_users, index=None, placeholder="Chọn một khách hàng...")
@@ -402,6 +388,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
