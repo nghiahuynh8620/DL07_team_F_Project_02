@@ -58,7 +58,7 @@ DL07_team_F_Project_02/
 ├── logo.png
 ├── packages.txt
 ├── requirements.txt
-└── README.md    ← file hướng dẫn này
+└── README.md    ← bạn đang ở đây
 ```
 
 - `data/`: dữ liệu đầu vào
