@@ -170,7 +170,6 @@ def initialize_session_state():
     with st.spinner("Đang chuẩn bị dữ liệu..."):
         st.session_state.hotel_df, st.session_state.comments_df = load_main_data()
         
-        # Content-based models (giữ nguyên)
         tfidf_recommender = create_tfidf_recommender(st.session_state.hotel_df)
         st.session_state.tfidf_vectorizer = tfidf_recommender[0]
         st.session_state.tfidf_matrix = tfidf_recommender[1]
@@ -179,15 +178,11 @@ def initialize_session_state():
         st.session_state.d2v_embeddings = load_embeddings(D2V_EMBEDDINGS_FILE)
         st.session_state.sbert_embeddings = load_embeddings(SBERT_EMBEDDINGS_FILE)
         
-        # [REPLACED] Tải file gợi ý ALS đã được tính toán sẵn
         try:
             st.session_state.als_recs_df = pd.read_csv(ALS_RECOMMENDATIONS_FILE)
         except FileNotFoundError:
             st.error(f"Lỗi: Không tìm thấy file `{ALS_RECOMMENDATIONS_FILE}`.")
-            # Tạo DataFrame rỗng để tránh lỗi ở các phần khác
             st.session_state.als_recs_df = pd.DataFrame(columns=['UserName', 'RecommendedHotel'])
-
-        # Tạo sẵn danh sách hotel và user để dùng trong UI
         st.session_state.hotel_names = st.session_state.hotel_df['Hotel_Name'].unique()
         st.session_state.user_list = sorted(st.session_state.comments_df['Reviewer_Name'].unique())
 
@@ -320,11 +315,9 @@ def render_page_by_als():
 
     if selected_user and st.button(f"🚀 Lấy gợi ý cho {selected_user}", type="primary", use_container_width=True):
         with st.spinner("Đang lấy dữ liệu gợi ý..."):
-            # [REPLACED] Lọc DataFrame thay vì chạy model
             recs_df = st.session_state.als_recs_df[st.session_state.als_recs_df['UserName'] == selected_user]
 
             if not recs_df.empty:
-                # Trộn kết quả với thông tin khách sạn đầy đủ
                 merged_df = recs_df.merge(
                     st.session_state.hotel_df,
                     left_on='RecommendedHotel',
@@ -343,11 +336,9 @@ def main():
     st.title("🏨 AGODA Hotel Recommendation System")
     st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
     
-    # [NEW] Thêm thông tin GVHD và HV thực hiện
     st.markdown("<p style='color: #007bff; font-weight: bold;'>GVHD: Khuất Thùy Phương</p>", unsafe_allow_html=True)
     st.markdown("<p style='color: #007bff; font-weight: bold;'>HV thực hiện: Nguyễn Thanh Bình - Nguyễn Tuấn Duy</p>", unsafe_allow_html=True)
 
-    # [NEW] Thêm CSS để chỉnh kích thước ảnh đồng đều
     st.markdown("""
         <style>
             .image-container img {
@@ -358,7 +349,6 @@ def main():
         </style>
     """, unsafe_allow_html=True)
 
-    # Khởi tạo dữ liệu và model một lần duy nhất
     initialize_session_state()
 
     with st.sidebar:
@@ -381,11 +371,11 @@ def main():
         st.header("Về dự án")
         st.info("Đây là đồ án tốt nghiệp ứng dụng các thuật toán gợi ý vào bài toán thực tế trên dữ liệu từ Agoda.")
 
-    # Gọi hàm render tương ứng với trang đã chọn
     page_options[selected_page]()
 
 if __name__ == "__main__":
     main()
+
 
 
 
