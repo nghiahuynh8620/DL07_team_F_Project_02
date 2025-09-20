@@ -329,7 +329,7 @@ def render_page_by_als():
                     st.session_state.hotel_df,
                     left_on='RecommendedHotel',
                     right_on='Hotel_Name',
-                    how='inner'  # Chỉ giữ lại những khách sạn có trong cả 2 file
+                    how='inner' 
                 )
                 
                 st.markdown("---")
@@ -386,6 +386,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
