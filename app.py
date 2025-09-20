@@ -43,7 +43,6 @@ DATA_PATH = Path("./data")
 MODEL_PATH = Path("./outputs/models")
 HOTEL_INFO_FILE = DATA_PATH / "hotel_info.csv"
 HOTEL_COMMENTS_FILE = DATA_PATH / "hotel_comments.csv"
-# ALS_MODEL_PATH = MODEL_PATH / "best_als_model"
 ALS_RECOMMENDATIONS_FILE = DATA_PATH / "als_recommendations.csv"
 D2V_EMBEDDINGS_FILE = MODEL_PATH / "d2v_emb.npy"
 SBERT_EMBEDDINGS_FILE = MODEL_PATH / "sbert_emb.npy"
@@ -336,9 +335,6 @@ def main():
     st.title("🏨 AGODA Hotel Recommendation System")
     st.caption("Ứng dụng gợi ý khách sạn sử dụng các mô hình lọc nội dung và lọc cộng tác.")
     
-    st.markdown("<p style='color: #007bff; font-weight: bold;'>GVHD: Khuất Thùy Phương</p>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #007bff; font-weight: bold;'>HV thực hiện: Nguyễn Thanh Bình - Nguyễn Tuấn Duy</p>", unsafe_allow_html=True)
-
     st.markdown("""
         <style>
             .image-container img {
@@ -375,6 +371,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
