@@ -96,5 +96,4 @@ Nếu bạn muốn đóng góp:
 
 ## 📝 Liên hệ
 
-- Tác giả hoặc nhóm: **Nghĩa Huỳnh** et al.  
-- Email: *(nếu muốn công khai)*
+- Tác giả hoặc nhóm: **Nghĩa Huỳnh** , **Nguyễn Ngọc Huy** et al.  
